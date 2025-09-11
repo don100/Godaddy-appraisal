@@ -1,88 +1,130 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>تقييم النطاقات</title>
-<style>
-  body { font-family: Arial, sans-serif; background:#f3f4f6; margin:0; padding:20px; }
-  h1 { text-align:center; margin-bottom:20px; }
-  textarea { width:100%; min-height:80px; padding:10px; border-radius:8px; border:1px solid #ccc; font-size:14px; }
-  button { background:#2563eb; color:#fff; border:none; padding:10px 20px; border-radius:6px; margin-top:10px; cursor:pointer; }
-  button:hover { background:#1d4ed8; }
-  table { width:100%; border-collapse:collapse; margin-top:20px; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 6px rgba(0,0,0,.1); }
-  th, td { padding:12px; border-bottom:1px solid #eee; text-align:left; }
-  th { background:#f9fafb; font-weight:bold; }
-  tr:hover { background:#f3f4f6; }
-  .toggle { cursor:pointer; color:#2563eb; font-weight:bold; }
-  .comparables { display:none; background:#f9fafb; }
-  .error { color:#b91c1c; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Domain Valuation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      text-align: center;
+    }
+    textarea {
+      width: 100%;
+      height: 100px;
+      margin-bottom: 10px;
+      padding: 8px;
+      font-size: 14px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #0077cc;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: white;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+    tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+    .comparables {
+      display: none;
+    }
+    .toggle-btn {
+      cursor: pointer;
+      color: #0077cc;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
-  <h1>تقييم أسماء النطاقات</h1>
-  <textarea id="domains" placeholder="اكتب النطاقات هنا (كل واحد في سطر)"></textarea>
+  <h1>Domain Valuation Tool</h1>
+  <textarea id="domains" placeholder="Enter domains (one per line)..."></textarea><br>
   <button onclick="evaluateDomains()">Evaluate</button>
+  
   <div id="results"></div>
 
-<script>
-  const proxy = "https://api.allorigins.win/raw?url=";
+  <script>
+    async function evaluateDomains() {
+      const domains = document.getElementById("domains").value.split("\n").map(d => d.trim()).filter(Boolean);
+      const resultsDiv = document.getElementById("results");
+      resultsDiv.innerHTML = "";
 
-  async function fetchValuation(domain) {
-    const url = `https://www.afternic.com/fosv2/api/v1/domains/${encodeURIComponent(domain)}/valuation`;
-    try {
-      const res = await fetch(proxy + encodeURIComponent(url));
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      return await res.json();
-    } catch (e) {
-      return { error: true, domain, message: e.message };
-    }
-  }
+      for (const domain of domains) {
+        try {
+          // نطلب من الدالة على Netlify
+          const res = await fetch(`/.netlify/functions/afternic?domain=${domain}`);
+          if (!res.ok) throw new Error("API error " + res.status);
 
-  async function evaluateDomains() {
-    const input = document.getElementById("domains").value.trim();
-    if (!input) return;
-    const domains = input.split("\n").map(d => d.trim()).filter(Boolean);
-    const resultsDiv = document.getElementById("results");
-    resultsDiv.innerHTML = "<p>⏳ جاري التحميل...</p>";
+          const data = await res.json();
 
-    let html = "<table><tr><th>Domain</th><th>Value</th><th>Last Updated</th><th>Comparables</th></tr>";
-    for (const domain of domains) {
-      const data = await fetchValuation(domain);
-      if (data.error) {
-        html += `<tr><td>${domain}</td><td colspan="3" class="error">❌ ${data.message}</td></tr>`;
-        continue;
+          // جدول لكل دومين
+          const table = document.createElement("table");
+          const header = `
+            <tr>
+              <th>Domain</th>
+              <th>GoValue</th>
+              <th>Last Updated</th>
+              <th>Comparables</th>
+            </tr>`;
+          table.innerHTML = header;
+
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${domain}</td>
+            <td>${data.goValue}</td>
+            <td>${data.lastUpdated}</td>
+            <td><span class="toggle-btn" onclick="toggleComparables('${domain}')">▼ Show</span></td>
+          `;
+          table.appendChild(row);
+
+          // Comparables section
+          const compRow = document.createElement("tr");
+          compRow.className = "comparables";
+          compRow.id = `comp-${domain}`;
+          compRow.innerHTML = `
+            <td colspan="4">
+              <table>
+                <tr><th>Domain</th><th>GoValue</th></tr>
+                ${data.comparables.map(c => `<tr><td>${c.domainName}</td><td>${c.goValue}</td></tr>`).join("")}
+              </table>
+            </td>
+          `;
+          table.appendChild(compRow);
+
+          resultsDiv.appendChild(table);
+
+        } catch (err) {
+          resultsDiv.innerHTML += `<p style="color:red;">❌ Error fetching ${domain}: ${err.message}</p>`;
+        }
       }
-      const sid = domain.replace(/\W/g, "_");
-      html += `
-        <tr>
-          <td>${domain}</td>
-          <td>$${data.goValue}</td>
-          <td>${data.lastUpdated}</td>
-          <td class="toggle" onclick="toggleComparables('${sid}')">▼ Show</td>
-        </tr>
-        <tr id="comp-${sid}" class="comparables">
-          <td colspan="4">
-            <table>
-              <tr><th>Comparable</th><th>Value</th></tr>
-              ${data.comparables.map(c => `<tr><td>${c.domainName}</td><td>$${c.goValue}</td></tr>`).join("")}
-            </table>
-          </td>
-        </tr>
-      `;
     }
-    html += "</table>";
-    resultsDiv.innerHTML = html;
-  }
 
-  function toggleComparables(id) {
-    const row = document.getElementById("comp-" + id);
-    if (row.style.display === "table-row") {
-      row.style.display = "none";
-    } else {
-      row.style.display = "table-row";
+    function toggleComparables(domain) {
+      const row = document.getElementById(`comp-${domain}`);
+      if (row.style.display === "table-row") {
+        row.style.display = "none";
+      } else {
+        row.style.display = "table-row";
+      }
     }
-  }
-</script>
+  </script>
 </body>
 </html>
