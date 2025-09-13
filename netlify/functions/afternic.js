@@ -1,35 +1,27 @@
-const fetch = require("node-fetch");
-
-exports.handler = async function (event) {
+export async function handler(event, context) {
   const domain = event.queryStringParameters.domain;
-  if (!domain) {
-    return { statusCode: 400, body: "Missing domain" };
-  }
-
-  const url = `https://www.afternic.com/fosv2/api/v1/domains/${encodeURIComponent(domain)}/valuation`;
 
   try {
-    const res = await fetch(url);
-    if (!res.ok) {
+    const response = await fetch(
+      `https://www.afternic.com/fosv2/api/v1/domains/${domain}/valuation`
+    );
+
+    if (!response.ok) {
       return {
-        statusCode: res.status,
-        body: `Error fetching from Afternic: ${res.statusText}`
+        statusCode: response.status,
+        body: JSON.stringify({ error: "Failed to fetch from Afternic" }),
       };
     }
 
-    const text = await res.text();
+    const data = await response.json();
     return {
       statusCode: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": "application/json"
-      },
-      body: text
+      body: JSON.stringify(data),
     };
   } catch (err) {
     return {
       statusCode: 500,
-      body: `Server error: ${err.message}`
+      body: JSON.stringify({ error: err.message }),
     };
   }
-};
+}
